@@ -1,22 +1,30 @@
 {
   "name": "finalprojecthealtiot",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "dev:sim": "ts-node --esm src/simulator.ts",
+    "dev:server": "ts-node --esm src/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "dotenv": "^17.4.2",
-    "mqtt": "^5.15.1"
+    "express": "^5.2.1",
+    "mqtt": "^5.15.1",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/mqtt": "^0.0.34",
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
