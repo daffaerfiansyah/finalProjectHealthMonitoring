@@ -56,7 +56,7 @@ app.post("/api/history", async (req: Request, res: Response) => {
     // Memasukkan data ke dalam tabel testing_history di Supabase
     // Parameter $4 (sensor_data) akan otomatis menjadi tipe JSONB di Postgres
     await pool.query(
-      "INSERT INTO testing_history (device_id, conclusion, severity, sensor_data) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO patient_history (device_id, conclusion, severity, sensor_data) VALUES ($1, $2, $3, $4)",
       [device_id, conclusion, severity || "UNKNOWN", sensor_data || {}]
     );
 
