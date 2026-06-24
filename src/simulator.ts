@@ -59,7 +59,7 @@ function getPatientProfileData(profile: PatientProfile) {
     let heartRate = 75; // Normal
     let spo2 = 98; // Normal
     let bodyTemp = 36.5; // Normal
-    let accelX = 0, accelY = 0, accelZ = 1.0; // Normal grav (SMV = 1.0)
+    let accelX = 0, accelY = 0, accelZ = 1.0; 
     
     switch (profile) {
         case 'A_SEHAT':
@@ -86,20 +86,18 @@ function getPatientProfileData(profile: PatientProfile) {
             bodyTemp = parseFloat((38.1 + Math.random() * 0.8).toFixed(1)); // >= 38.0
             break;
         case 'I_JATUH':
-            accelX = 1.5; accelY = 1.5; accelZ = 1.5; // Menghasilkan SMV ~2.59
+            accelX = 1.5; accelY = 1.5; accelZ = 1.5; 
             break;
     }
     
-    // Tambahkan sedikit noise acak untuk sensor yang sedang normal agar terlihat natural
     if (profile !== 'B_TAKIKARDIA' && profile !== 'C_BRADIKARDIA') heartRate += Math.floor(Math.random() * 4 - 2);
     if (profile !== 'D_HIPOKSEMIA_RINGAN' && profile !== 'E_HIPOKSEMIA_BERAT') spo2 -= Math.floor(Math.random() * 2);
     if (profile !== 'F_HIPOTERMIA' && profile !== 'G_DEMAM' && profile !== 'H_DEMAM_TINGGI') bodyTemp += parseFloat((Math.random() * 0.2 - 0.1).toFixed(1));
 
-    // Rumus Phytagoras 3D untuk SMV (Signal Magnitude Vector) ADXL345
     let smv = Math.sqrt((accelX * accelX) + (accelY * accelY) + (accelZ * accelZ));
     let impactForce = parseFloat(smv.toFixed(2));
-    let isFalling = impactForce >= 2.5; // Ambang batas jatuh
-    let ecg = Math.floor(100 + Math.random() * 200); // Simulasi mentah ECG
+    let isFalling = impactForce >= 2.5; 
+    let ecg = Math.floor(100 + Math.random() * 200); 
 
     return { ecg, heartRate, spo2, bodyTemp: parseFloat(bodyTemp.toFixed(1)), impactForce, isFalling };
 }
@@ -115,37 +113,35 @@ function determineHealthStatus(data: any): { text: string, severity: string } {
 
     // 1. AD8232 (Heart Rate)
     if (data.heartRate > 100) {
-        score += 3; // Memicu MAJOR
+        score += 3; 
         warnings.push("Takikardia (>100 bpm)");
     } else if (data.heartRate < 60) {
-        score += 3; // Memicu MAJOR
+        score += 3; 
         warnings.push("Bradikardia (<60 bpm)");
     }
 
-    // 2. MAX30102 (SpO2)
     if (data.spo2 < 90) {
-        score += 5; // Memicu CRITICAL
+        score += 5; 
         warnings.push("Hipoksemia Berat (<90%)");
     } else if (data.spo2 < 95) {
-        score += 2; // Memicu MINOR
+        score += 2; 
         warnings.push("Hipoksemia Ringan (<95%)");
     }
 
     // 3. MLX90614 (Body Temp)
     if (data.bodyTemp >= 38.0) {
-        score += 5; // Memicu CRITICAL
+        score += 5; 
         warnings.push("Demam Tinggi (>=38°C)");
     } else if (data.bodyTemp > 37.5) {
-        score += 2; // Memicu MINOR
+        score += 2; 
         warnings.push("Demam (>37.5°C)");
     } else if (data.bodyTemp < 36.0) {
-        score += 1; // Memicu WARNING
+        score += 1; 
         warnings.push("Hipotermia (<36°C)");
     }
 
     if (score === 0) return { text: "Pasien Sehat", severity: "NORMAL" };
     
-    // Tentukan final severity berdasarkan total poin
     let finalSeverity = "WARNING";
     if (score >= 5) finalSeverity = "CRITICAL";
     else if (score >= 3) finalSeverity = "MAJOR";
@@ -167,9 +163,7 @@ client.on('connect', () => {
                 telemetryData = {
                     ...telemetryData,
                     heartRate: 0, spo2: 0, bodyTemp: 0, ecg: 0, impactForce: 1.0,
-                    isFalling: false,
-                    healthStatus: "Menunggu Pasien...",
-                    severity: "NORMAL"
+                    isFalling: false
                 };
                 process.stdout.write(`\r[IDLE] Menunggu Pasien... (${stateTimer}/5)   `);
 
@@ -177,7 +171,6 @@ client.on('connect', () => {
                     currentState = 'WARM_UP';
                     stateTimer = 0;
                     
-                    // Urutkan secara bergiliran (Sekuensial)
                     currentProfile = profileSequence[currentProfileIndex] || 'A_SEHAT';
                     currentProfileIndex = (currentProfileIndex + 1) % profileSequence.length;
                     
@@ -189,9 +182,7 @@ client.on('connect', () => {
                 telemetryData = {
                     ...telemetryData,
                     ...getPatientProfileData(currentProfile),
-                    heartRate: Math.floor(40 + Math.random() * 100), // Random noise karena tangan baru nempel
-                    healthStatus: "Sedang Pemanasan...",
-                    severity: "NORMAL"
+                    heartRate: Math.floor(40 + Math.random() * 100) 
                 };
                 process.stdout.write(`\r[WARM_UP] Mengkalibrasi sensor... (${stateTimer}/3)   `);
 
@@ -209,9 +200,7 @@ client.on('connect', () => {
                 
                 telemetryData = {
                     ...telemetryData,
-                    ...sensorData,
-                    healthStatus: "Sedang Mengukur...",
-                    severity: "NORMAL"
+                    ...sensorData
                 };
                 console.log(`[MEASURING] HR: ${sensorData.heartRate} | Temp: ${sensorData.bodyTemp} | SpO2: ${sensorData.spo2} | SMV: ${sensorData.impactForce}g (${stateTimer}/10)`);
 
@@ -246,7 +235,11 @@ client.on('connect', () => {
                     ...telemetryData,
                     ...avgData,
                     healthStatus: conclusion.text,
-                    severity: conclusion.severity
+                    severity: conclusion.severity,
+                    finalHeartRate: avgData.heartRate,
+                    finalSpo2: avgData.spo2,
+                    finalBodyTemp: avgData.bodyTemp,
+                    finalImpactForce: avgData.impactForce
                 };
                 
                 console.log(`\n[CONCLUSION] Hasil Akhir: ${conclusion.text}\n`);
