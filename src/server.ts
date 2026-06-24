@@ -59,6 +59,9 @@ async function fetchTbCustomerInfo(customerId: string, token: string) {
 // ==========================================
 // ENDPOINT: Alarm
 // ==========================================
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).send("✅ Railway Backend IoT is Running Perfectly!");
+});
 app.post("/api/alarm", async (req: Request, res: Response) => {
   try {
     const { device_id, type, value } = req.body; 
