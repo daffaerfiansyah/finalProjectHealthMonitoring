@@ -59,9 +59,40 @@ app.get("/api/debug", async (req: Request, res: Response) => {
         }
         
         const data = await response.json();
+        
+        // Jika ada parameter customerId, tes fetch customer
+        const customerId = req.query.customerId as string;
+        if (customerId) {
+            const custResponse = await fetch(`${process.env.TB_BASE_URL}/api/customer/${customerId}`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Authorization": `Bearer ${data.token}`
+                }
+            });
+            
+            if (!custResponse.ok) {
+                const custErr = await custResponse.text();
+                return res.status(custResponse.status).json({
+                    status: "FAILED_FETCH_CUSTOMER",
+                    message: "Login sukses, tapi gagal mengambil data Customer dengan ID tersebut.",
+                    customer_id: customerId,
+                    response_status: custResponse.status,
+                    error_detail: custErr
+                });
+            }
+            
+            const custData = await custResponse.json();
+            return res.json({
+                status: "SUCCESS_FETCH_CUSTOMER",
+                message: "Berhasil login dan mendapatkan data Customer!",
+                customer_data: custData
+            });
+        }
+
         res.json({
             status: "SUCCESS",
-            message: "Berhasil login ke ThingsBoard!",
+            message: "Berhasil login ke ThingsBoard! (Tambahkan ?customerId=... di URL untuk mengetes ID Customer)",
             tb_url: process.env.TB_BASE_URL,
             tb_username: process.env.TB_USERNAME,
             token_preview: data.token ? data.token.substring(0, 15) + "..." : "No Token"
