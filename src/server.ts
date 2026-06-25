@@ -201,21 +201,51 @@ app.post("/api/alarm", async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// ENDPOINT: History (Dengan Sinkronisasi User)
+// ENDPOINT: History (Dengan Sinkronisasi User Otomatis)
 // ==========================================
 app.post("/api/history", async (req: Request, res: Response) => {
   try {
-    const { device_id, conclusion, severity, sensor_data, handled_by_user_id } = req.body; 
+    let { device_id, conclusion, severity, sensor_data, handled_by_user_id } = req.body; 
 
     console.log(`\n[${new Date().toISOString()}] 📊 Data History Masuk:`);
-    console.log(`Device: ${device_id} | Hasil: ${conclusion} | User ID: ${handled_by_user_id || 'Tidak ada'}`);
+    console.log(`Device: ${device_id} | Hasil: ${conclusion} | User ID (Awal): ${handled_by_user_id || 'Tidak ada'}`);
 
     if (!device_id || !conclusion) return res.status(400).json({ error: "Invalid data" });
 
+    // Jika handled_by_user_id kosong, kita cari otomatis di ThingsBoard berdasarkan nama Device
+    if (!handled_by_user_id) {
+        console.log(`[SINKRONISASI] Mencari Customer ID untuk device: ${device_id}...`);
+        try {
+            const tbToken = await getThingsBoardToken();
+            const deviceResponse = await fetch(`${process.env.TB_BASE_URL}/api/tenant/devices?deviceName=${encodeURIComponent(device_id)}`, {
+                headers: { "X-Authorization": `Bearer ${tbToken}` }
+            });
+            
+            if (deviceResponse.ok) {
+                const deviceData = await deviceResponse.json();
+                if (deviceData && deviceData.customerId && deviceData.customerId.id) {
+                    const foundCustomerId = deviceData.customerId.id;
+                    // Pastikan bukan ID kosong bawaan ThingsBoard (13814000-1dd2-11b2-8080-808080808080)
+                    if (foundCustomerId !== '13814000-1dd2-11b2-8080-808080808080') {
+                        handled_by_user_id = foundCustomerId;
+                        console.log(`[SINKRONISASI] ✅ Menemukan Customer ID: ${handled_by_user_id}`);
+                    } else {
+                        console.log(`[SINKRONISASI] ⚠️ Device ini belum di-assign ke Customer manapun di ThingsBoard.`);
+                    }
+                }
+            } else {
+                console.log(`[SINKRONISASI] ⚠️ Gagal mencari device di ThingsBoard: ${deviceResponse.status}`);
+            }
+        } catch (searchErr) {
+            console.error("❌ Gagal mencari device:", searchErr);
+        }
+    }
+
+    // Jika sekarang kita sudah punya handled_by_user_id, jalankan sinkronisasi user
     if (handled_by_user_id) {
         const userCheck = await pool.query("SELECT id FROM users WHERE id = $1", [handled_by_user_id]);
         if (userCheck.rowCount === 0) {
-            console.log(`[SINKRONISASI] Menarik data dari ThingsBoard...`);
+            console.log(`[SINKRONISASI] Menarik data profil Customer dari ThingsBoard...`);
             try {
                 const tbToken = await getThingsBoardToken();
                 const tbUser = await fetchTbCustomerInfo(handled_by_user_id, tbToken);
@@ -223,9 +253,9 @@ app.post("/api/history", async (req: Request, res: Response) => {
                     "INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)",
                     [tbUser.id.id, tbUser.email || "no-email", tbUser.title || tbUser.name, "Customer"]
                 );
-                console.log(`[SINKRONISASI] ✅ User berhasil disimpan.`);
+                console.log(`[SINKRONISASI] ✅ Profil User berhasil disimpan ke database.`);
             } catch (syncErr) {
-                console.error("❌ Gagal sinkronisasi user:", syncErr);
+                console.error("❌ Gagal menarik profil user:", syncErr);
             }
         }
     }
