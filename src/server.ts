@@ -34,6 +34,46 @@ app.get("/", (req: Request, res: Response) => {
   res.status(200).send("✅ Railway Backend IoT is Running Perfectly!");
 });
 
+// Debug Endpoint untuk ThingsBoard
+app.get("/api/debug", async (req: Request, res: Response) => {
+    try {
+        const response = await fetch(`${process.env.TB_BASE_URL}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: process.env.TB_USERNAME,
+                password: process.env.TB_PASSWORD
+            })
+        });
+        
+        if (!response.ok) {
+            const errText = await response.text();
+            return res.status(response.status).json({
+                status: "FAILED",
+                message: "Gagal login ke ThingsBoard",
+                tb_url: process.env.TB_BASE_URL,
+                tb_username: process.env.TB_USERNAME,
+                response_status: response.status,
+                error_detail: errText
+            });
+        }
+        
+        const data = await response.json();
+        res.json({
+            status: "SUCCESS",
+            message: "Berhasil login ke ThingsBoard!",
+            tb_url: process.env.TB_BASE_URL,
+            tb_username: process.env.TB_USERNAME,
+            token_preview: data.token ? data.token.substring(0, 15) + "..." : "No Token"
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            status: "CRASH",
+            error: error.message || String(error)
+        });
+    }
+});
+
 // ==========================================
 // HELPER: Autentikasi ThingsBoard
 // ==========================================
