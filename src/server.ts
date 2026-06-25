@@ -148,7 +148,7 @@ app.get("/api/debug-db", async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// HELPER: Autentikasi ThingsBoard
+// HELPER: Autentikasi & Ambil Profil User
 // ==========================================
 async function getThingsBoardToken(): Promise<string> {
     const response = await fetch(`${process.env.TB_BASE_URL}/api/auth/login`, {
@@ -159,23 +159,20 @@ async function getThingsBoardToken(): Promise<string> {
             password: process.env.TB_PASSWORD
         })
     });
-    if (!response.ok) throw new Error("Gagal login ke ThingsBoard API");
+    if (!response.ok) throw new Error("Gagal login ke ThingsBoard");
     const data = await response.json();
     return data.token;
 }
 
-// ==========================================
-// HELPER: Tarik Data Customer
-// ==========================================
-async function fetchTbCustomerInfo(customerId: string, token: string) {
-    const response = await fetch(`${process.env.TB_BASE_URL}/api/customer/${customerId}`, {
+async function fetchTbUserInfo(userId: string, token: string) {
+    const response = await fetch(`${process.env.TB_BASE_URL}/api/user/${userId}`, {
         method: "GET",
         headers: {
             "Content-Type": "application/json",
             "X-Authorization": `Bearer ${token}`
         }
     });
-    if (!response.ok) throw new Error(`Gagal menarik data customer`);
+    if (!response.ok) throw new Error(`Gagal menarik data User: ${response.status}`);
     return await response.json();
 }
 
@@ -212,32 +209,47 @@ app.post("/api/history", async (req: Request, res: Response) => {
 
     if (!device_id || !conclusion) return res.status(400).json({ error: "Invalid data" });
 
-    // Jika handled_by_user_id kosong, kita cari otomatis di ThingsBoard berdasarkan nama Device
+    // Jika handled_by_user_id kosong, kita cari otomatis di ThingsBoard berdasarkan Server Attributes Device
     if (!handled_by_user_id) {
-        console.log(`[SINKRONISASI] Mencari Customer ID untuk device: ${device_id}...`);
+        console.log(`[SINKRONISASI] Mencari atribut 'patientUserId' untuk device: ${device_id}...`);
         try {
             const tbToken = await getThingsBoardToken();
+            
+            // 1. Cari Device ID asli berdasarkan namanya
             const deviceResponse = await fetch(`${process.env.TB_BASE_URL}/api/tenant/devices?deviceName=${encodeURIComponent(device_id)}`, {
                 headers: { "X-Authorization": `Bearer ${tbToken}` }
             });
             
             if (deviceResponse.ok) {
                 const deviceData = await deviceResponse.json();
-                if (deviceData && deviceData.customerId && deviceData.customerId.id) {
-                    const foundCustomerId = deviceData.customerId.id;
-                    // Pastikan bukan ID kosong bawaan ThingsBoard (13814000-1dd2-11b2-8080-808080808080)
-                    if (foundCustomerId !== '13814000-1dd2-11b2-8080-808080808080') {
-                        handled_by_user_id = foundCustomerId;
-                        console.log(`[SINKRONISASI] ✅ Menemukan Customer ID: ${handled_by_user_id}`);
+                if (deviceData && deviceData.id && deviceData.id.id) {
+                    const realDeviceId = deviceData.id.id;
+                    
+                    // 2. Ambil Server Attributes dari Device tersebut
+                    const attrResponse = await fetch(`${process.env.TB_BASE_URL}/api/plugins/telemetry/DEVICE/${realDeviceId}/values/attributes/SERVER_SCOPE`, {
+                        headers: { "X-Authorization": `Bearer ${tbToken}` }
+                    });
+                    
+                    if (attrResponse.ok) {
+                        const attributes = await attrResponse.json();
+                        // attributes biasanya berbentuk array: [{"key":"patientUserId", "value":"..."}]
+                        const patientAttr = attributes.find((a: any) => a.key === 'patientUserId');
+                        
+                        if (patientAttr && patientAttr.value) {
+                            handled_by_user_id = patientAttr.value;
+                            console.log(`[SINKRONISASI] ✅ Menemukan patientUserId: ${handled_by_user_id}`);
+                        } else {
+                            console.log(`[SINKRONISASI] ⚠️ Atribut 'patientUserId' tidak ditemukan pada Device ini di ThingsBoard.`);
+                        }
                     } else {
-                        console.log(`[SINKRONISASI] ⚠️ Device ini belum di-assign ke Customer manapun di ThingsBoard.`);
+                        console.log(`[SINKRONISASI] ⚠️ Gagal mengambil Server Attributes: ${attrResponse.status}`);
                     }
                 }
             } else {
                 console.log(`[SINKRONISASI] ⚠️ Gagal mencari device di ThingsBoard: ${deviceResponse.status}`);
             }
         } catch (searchErr) {
-            console.error("❌ Gagal mencari device:", searchErr);
+            console.error("❌ Gagal mencari device/atribut:", searchErr);
         }
     }
 
@@ -248,10 +260,14 @@ app.post("/api/history", async (req: Request, res: Response) => {
             console.log(`[SINKRONISASI] Menarik data profil Customer dari ThingsBoard...`);
             try {
                 const tbToken = await getThingsBoardToken();
-                const tbUser = await fetchTbCustomerInfo(handled_by_user_id, tbToken);
+                const tbUser = await fetchTbUserInfo(handled_by_user_id, tbToken);
+                
+                // ThingsBoard User memiliki firstName dan lastName
+                const fullName = [tbUser.firstName, tbUser.lastName].filter(Boolean).join(" ") || "Unnamed User";
+                
                 await pool.query(
                     "INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)",
-                    [tbUser.id.id, tbUser.email || "no-email", tbUser.title || tbUser.name, "Customer"]
+                    [tbUser.id.id, tbUser.email || "no-email", fullName, "Patient"]
                 );
                 console.log(`[SINKRONISASI] ✅ Profil User berhasil disimpan ke database.`);
             } catch (syncErr) {
