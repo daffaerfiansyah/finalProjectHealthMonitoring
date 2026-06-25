@@ -105,6 +105,48 @@ app.get("/api/debug", async (req: Request, res: Response) => {
     }
 });
 
+// Debug Endpoint untuk Supabase Database
+app.get("/api/debug-db", async (req: Request, res: Response) => {
+    try {
+        const tests: any = {};
+        
+        // Test 1: Query users table
+        try {
+            const userRes = await pool.query("SELECT * FROM users LIMIT 1");
+            tests.users_table = "OK";
+        } catch (e: any) {
+            tests.users_table = "ERROR: " + (e.message || String(e));
+        }
+
+        // Test 2: Query patient_history table
+        try {
+            const historyRes = await pool.query("SELECT * FROM patient_history LIMIT 1");
+            tests.patient_history_table = "OK";
+        } catch (e: any) {
+            tests.patient_history_table = "ERROR: " + (e.message || String(e));
+        }
+        
+        // Test 3: Coba simulasi flow sinkronisasi dengan ID dummy
+        try {
+            const dummyId = "00000000-0000-0000-0000-000000000000";
+            await pool.query("SELECT id FROM users WHERE id = $1", [dummyId]);
+            tests.select_user_by_id = "OK";
+        } catch (e: any) {
+            tests.select_user_by_id = "ERROR: " + (e.message || String(e));
+        }
+
+        res.json({
+            status: "DATABASE_TEST_COMPLETE",
+            results: tests
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            status: "CRASH",
+            error: error.message || String(error)
+        });
+    }
+});
+
 // ==========================================
 // HELPER: Autentikasi ThingsBoard
 // ==========================================
