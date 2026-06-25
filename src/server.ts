@@ -131,6 +131,6 @@ app.post("/api/history", async (req: Request, res: Response) => {
 
 // Port otomatis dari sistem
 const PORT = parseInt(process.env.PORT || '8080', 10);
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, () => {
   console.log(`✅ Server Backend berjalan di port ${PORT}`);
 });
