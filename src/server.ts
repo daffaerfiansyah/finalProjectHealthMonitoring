@@ -129,8 +129,13 @@ app.post("/api/history", async (req: Request, res: Response) => {
   }
 });
 
-// Port otomatis dari sistem
-const PORT = parseInt(process.env.PORT || '8080', 10);
-app.listen(PORT, () => {
-  console.log(`✅ Server Backend berjalan di port ${PORT}`);
-});
+// Jalankan app.listen hanya jika berjalan di lokal (bukan Vercel)
+if (process.env.VERCEL !== '1') {
+    const PORT = parseInt(process.env.PORT || '8080', 10);
+    app.listen(PORT, () => {
+        console.log(`✅ Server Backend berjalan di port ${PORT}`);
+    });
+}
+
+// Export app untuk Vercel Serverless Function
+export default app;
